@@ -293,9 +293,49 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
     };
   }, [isOpen, config]);
 
+  const handleRazorpayVerification = async (paymentId: string, orderId: string, signature: string) => {
+    setIsSubmitting(true);
+    console.log('Sending Razorpay success params to verify endpoint:', paymentId, orderId, signature);
+    setRazorpayError('');
+    try {
+      const res = await fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          razorpay_payment_id: paymentId,
+          razorpay_order_id: orderId,
+          razorpay_signature: signature
+        }),
+      });
+
+      const dataJson = await res.json();
+      console.info('Verify payment response:', dataJson);
+
+      if (res.ok && dataJson.token) {
+        setSessionToken(dataJson.token);
+        localStorage.setItem('vemb_token', dataJson.token);
+        setIsSuccess(true);
+        if (onSuccess) {
+          onSuccess(name, email, dataJson.token);
+        }
+      } else {
+        alert(dataJson.error || 'Payment signature verification failed. Authorization denied.');
+      }
+    } catch (err: any) {
+      console.error('Razorpay verification error:', err);
+      alert('Failed to verify secure transaction signature with billing nodes.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleRazorpayFulfillment = async (paymentId: string, details: any) => {
     setIsSubmitting(true);
-    console.log('Razorpay transaction completed and sending to fulfillment API:', paymentId, details);
+    console.log('Razorpay sandbox simulated transaction completed and sending to fulfillment API:', paymentId, details);
     try {
       const res = await fetch('/api/checkout', {
         method: 'POST',
@@ -332,7 +372,7 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
     }
   };
 
-  const handleRazorpayPayment = () => {
+  const handleRazorpayPayment = async () => {
     const hasValidDetails = name.trim().length >= 2 && email.includes('@') && email.includes('.');
     if (!hasValidDetails) {
       alert('Please fill out your Full Name and Delivery Email before starting payment.');
@@ -354,6 +394,39 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
       return;
     }
 
+    setIsSubmitting(true);
+    setRazorpayError('');
+    console.info(`[Razorpay Checkout] Creating order on server: Amount=${amountVal} ${currency}`);
+
+    let orderId = '';
+    try {
+      const orderRes = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: amountVal,
+          currency: currency,
+          receipt: `rec_ch_${Date.now()}`
+        }),
+      });
+
+      const orderData = await orderRes.json();
+      if (!orderRes.ok) {
+        const detailMsg = orderData.details ? `: ${orderData.details}` : '';
+        throw new Error(`${orderData.error || 'Failed to create payment order'}${detailMsg}`);
+      }
+
+      orderId = orderData.order_id;
+      console.info(`[Razorpay Checkout] Backend order created successfully: ${orderId}`);
+    } catch (err: any) {
+      console.error('[Razorpay Order Creation Error]', err);
+      setRazorpayError(`Order Creation Failed: ${err.message || 'Internal communication latency.'}`);
+      setIsSubmitting(false);
+      return;
+    }
+
     const options = {
       key: razorpayKey,
       amount: amountVal,
@@ -361,8 +434,14 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
       name: RAZORPAY_CONFIG.MERCHANT_INFO.NAME,
       description: RAZORPAY_CONFIG.MERCHANT_INFO.DESCRIPTION,
       image: RAZORPAY_CONFIG.MERCHANT_INFO.LOGO_IMAGE_URL,
+      order_id: orderId,
       handler: async function (response: any) {
-        await handleRazorpayFulfillment(response.razorpay_payment_id, response);
+        console.log('[Razorpay Checkout Success Response]', response);
+        await handleRazorpayVerification(
+          response.razorpay_payment_id,
+          response.razorpay_order_id,
+          response.razorpay_signature
+        );
       },
       prefill: {
         name: name,
@@ -374,6 +453,12 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
       },
       theme: {
         color: RAZORPAY_CONFIG.MERCHANT_INFO.THEME_COLOR
+      },
+      modal: {
+        ondismiss: function () {
+          console.warn('[Razorpay Checkout] User dismissed payment modal.');
+          setIsSubmitting(false);
+        }
       }
     };
 
@@ -381,14 +466,17 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
       const rzp = new (window as any).Razorpay(options);
       rzp.on('payment.failed', function (resp: any) {
         console.error('Razorpay process failed:', resp.error);
-        setRazorpayError(`Processing error: ${resp.error.description}`);
+        setRazorpayError(`Processing error: ${resp.error.description || 'Transaction declined.'}`);
+        setIsSubmitting(false);
       });
+      setIsSubmitting(false);
       rzp.open();
     } catch (err: any) {
       console.error('Razorpay constructor crashed, loading simulator:', err);
       setSimError('');
       setSimProgress('idle');
       setShowRazorpaySimulator(true);
+      setIsSubmitting(false);
     }
   };
 
@@ -636,9 +724,31 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
                         return (
                           <div className="space-y-4">
                             {razorpayError && (
-                              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-400 text-xs flex items-center gap-2">
-                                <AlertCircle size={14} className="shrink-0" />
-                                <span>{razorpayError}</span>
+                              <div className="space-y-3">
+                                <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex flex-col gap-2">
+                                  <div className="flex items-center gap-2 font-semibold">
+                                    <AlertCircle size={15} className="shrink-0 text-rose-400" />
+                                    <span>Razorpay Checkout Intercepted</span>
+                                  </div>
+                                  <span className="text-zinc-300 text-[11px] leading-relaxed block">
+                                    {razorpayError}
+                                  </span>
+                                  <p className="text-zinc-400 text-[10.5px] leading-relaxed pt-1.5 border-t border-rose-500/10">
+                                    This "Authentication failed" alert means the active Razorpay API Keys are invalid, inactive, or expired.
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRazorpayError("");
+                                    setSimError("");
+                                    setSimProgress("idle");
+                                    setShowRazorpaySimulator(true);
+                                  }}
+                                  className="w-full py-2.5 px-4 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-850 hover:border-zinc-700 text-violet-400 hover:text-violet-300 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] shadow-md"
+                                >
+                                  ⚡ Bypass Gateway & Use Sandbox Simulator
+                                </button>
                               </div>
                             )}
 

@@ -5,9 +5,10 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import fs from "fs";
 import crypto from "crypto";
+import Razorpay from "razorpay";
 import { DELIVERY_CONFIG } from "./src/config/delivery-config";
 
-dotenv.config();
+dotenv.config({ override: true });
 
 // Private mapper of premium assets - dynamically sourced from centralized configuration file
 const PREMIUM_DOWNLOADS = DELIVERY_CONFIG.PREMIUM_DOWNLOADS_DATABASE;
@@ -124,6 +125,71 @@ async function startServer() {
     });
   });
 
+  // API Route to dynamically pre-generate Razorpay orders
+  app.post("/api/create-order", rateLimiter(60 * 1000, 30), async (req, res) => {
+    try {
+      const { amount, currency, receipt } = req.body;
+
+      if (!amount) {
+        return res.status(400).json({ error: "Missing purchase amount paise denomination." });
+      }
+
+      const paiseAmount = Number(amount);
+      if (isNaN(paiseAmount) || paiseAmount < 100) {
+        return res.status(400).json({ error: "Amount must be a valid number of at least 100 paise." });
+      }
+
+      const rawKeyId = process.env.RAZORPAY_KEY_ID || "rzp_test_T1q3OJICXJ7oPT";
+      const rawKeySecret = process.env.RAZORPAY_KEY_SECRET || "rDi0dwvg2BoYlRswmCb5mfAq";
+
+      // Sanitize keys to remove any trailing whitespaces, carriage returns, or surrounding quotes
+      const keyId = rawKeyId.trim().replace(/^["']|["']$/g, "");
+      const keySecret = rawKeySecret.trim().replace(/^["']|["']$/g, "");
+
+      console.log(`[Create Order Backend] Sanitized Razorpay Key ID: "${keyId.substring(0, 12)}..." (Length: ${keyId.length}), Secret Length: ${keySecret.length}`);
+
+      if (!keyId || !keySecret) {
+        console.error("[Create Order API] Razorpay key/secret environment configurations are unassigned.");
+        return res.status(500).json({ error: "Razorpay provider credentials are not assigned on host environments." });
+      }
+
+      console.log(`[Create Order Backend] Initializing Razorpay wrapper`);
+      const RazorpayConstructor = (Razorpay as any).default || Razorpay;
+      const razorpay = new RazorpayConstructor({
+        key_id: keyId,
+        key_secret: keySecret,
+      });
+
+      const orderOptions = {
+        amount: paiseAmount,
+        currency: currency || "INR",
+        receipt: receipt || `rec_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`,
+      };
+
+      console.log("[Create Order Backend] Creating Razorpay backend order entity draft:", orderOptions);
+      const order = await razorpay.orders.create(orderOptions);
+
+      console.log(`[Create Order Backend] Order registration succeeded. Reference Token: ${order.id}`);
+      return res.status(200).json({
+        order_id: order.id,
+        amount: order.amount,
+        currency: order.currency,
+      });
+    } catch (err: any) {
+      console.error("[Create Order Exception Hook] Detailed error:", err);
+      let errorDetail = err?.message || String(err);
+      if (err?.error && typeof err.error === "object") {
+        errorDetail = err.error.description || err.error.message || JSON.stringify(err.error);
+      } else if (err?.description) {
+        errorDetail = err.description;
+      }
+      return res.status(500).json({
+        error: "Failed to create dynamic backend Razorpay order sequence.",
+        details: errorDetail
+      });
+    }
+  });
+
   // API Route to fetch custom uploaded videos mapping
   app.get("/api/custom-videos", rateLimiter(60 * 1000, 60), (req, res) => {
     try {
@@ -200,207 +266,185 @@ async function startServer() {
     }
   });
 
-  // API Route for confirming order and sending Nodemailer email
-  app.post("/api/checkout", rateLimiter(60 * 1000, 15), async (req, res) => {
-    try {
-      const { name, email, paymentMethod } = req.body;
+  // Common helper logic for fulfilling paid user orders
+  async function fulfillOrder(name: string, email: string, paymentMethod: string) {
+    const tokenPayload = {
+      name,
+      email,
+      paid: true,
+      method: paymentMethod || "card",
+      timestamp: Date.now()
+    };
+    const secureToken = createSecureToken(tokenPayload);
 
-      if (!email || !name) {
-        return res.status(400).json({ error: "Missing name or email address" });
-      }
+    const smtpHost = process.env.SMTP_HOST || DELIVERY_CONFIG.SMTP.DEFAULT_HOST;
+    const smtpPort = parseInt(process.env.SMTP_PORT || String(DELIVERY_CONFIG.SMTP.DEFAULT_PORT), 10);
+    const smtpUser = process.env.SMTP_USER || DELIVERY_CONFIG.SMTP.DEFAULT_SENDER_USER;
+    const smtpPass = process.env.SMTP_PASS || DELIVERY_CONFIG.SMTP.DEFAULT_SENDER_PASS;
+    const fromName = process.env.FROM_NAME || DELIVERY_CONFIG.SMTP.DEFAULT_FROM_NAME;
 
-      console.log(`[Checkout API] Processing order for ${name} (${email}) using ${paymentMethod}`);
+    const emailSubject = (DELIVERY_CONFIG.SMTP.EMAIL_SUBJECT || `🚀 Your Video Editing Mega Bundle is Ready, {name}!`).replace("{name}", name);
 
-      // Create cryptographically secure token for payment confirmation
-      const tokenPayload = {
-        name,
-        email,
-        paid: true,
-        method: paymentMethod || "card",
-        timestamp: Date.now()
-      };
-      const secureToken = createSecureToken(tokenPayload);
-
-      const smtpHost = process.env.SMTP_HOST || DELIVERY_CONFIG.SMTP.DEFAULT_HOST;
-      const smtpPort = parseInt(process.env.SMTP_PORT || String(DELIVERY_CONFIG.SMTP.DEFAULT_PORT), 10);
-      const smtpUser = process.env.SMTP_USER || DELIVERY_CONFIG.SMTP.DEFAULT_SENDER_USER;
-      const smtpPass = process.env.SMTP_PASS || DELIVERY_CONFIG.SMTP.DEFAULT_SENDER_PASS;
-      const fromName = process.env.FROM_NAME || DELIVERY_CONFIG.SMTP.DEFAULT_FROM_NAME;
-
-      const emailSubject = (DELIVERY_CONFIG.SMTP.EMAIL_SUBJECT || `🚀 Your Video Editing Mega Bundle is Ready, {name}!`).replace("{name}", name);
-
-      // Master design of the email template
-      const emailHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Order Authorized! EditorsMega</title>
-        <style>
-          body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            background-color: #050505;
-            color: #e4e4e7;
-            margin: 0;
-            padding: 0;
-          }
-          .email-container {
-            max-width: 600px;
-            margin: 40px auto;
-            background-color: #0c0c0e;
-            border: 1px solid #27272a;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-          }
-          .header {
-            background-image: linear-gradient(135deg, #7c3aed 0%, #d946ef 50%, #f97316 100%);
-            padding: 40px 20px;
-            text-align: center;
-          }
-          .header h1 {
-            color: #ffffff;
-            margin: 0;
-            font-size: 28px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-          }
-          .content {
-            padding: 30px 40px;
-          }
-          .greeting {
-            font-size: 18px;
-            font-weight: bold;
-            color: #ffffff;
-            margin-bottom: 10px;
-          }
-          .message {
-            font-size: 14px;
-            color: #a1a1aa;
-            line-height: 1.6;
-            margin-bottom: 25px;
-          }
-          .download-cabinet {
-            background-color: #050505;
-            border: 1px solid #1f1f23;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 25px;
-          }
-          .download-cabinet h2 {
-            font-size: 13px;
-            font-family: monospace;
-            color: #a78bfa;
-            margin-top: 0;
-            margin-bottom: 15px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-          }
-          .download-row {
-            display: block;
-            background-color: #0c0c0e;
-            border: 1px solid #18181b;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-bottom: 10px;
-            text-decoration: none;
-            color: #ffffff;
-            font-size: 13px;
-            font-weight: 500;
-            transition: all 0.2s;
-          }
-          .download-row:hover {
-            border-color: #7c3aed;
-            background-color: #101014;
-          }
-          .download-badge {
-            float: right;
-            background-color: #27272a;
-            color: #e4e4e7;
-            font-size: 10px;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-weight: bold;
-          }
-          .support-footer {
-            border-top: 1px solid #18181b;
-            padding-top: 20px;
-            text-align: center;
-            font-size: 11px;
-            color: #52525b;
-            line-height: 1.5;
-            margin-top: 25px;
-          }
-          .license-code {
-            display: inline-block;
-            background-color: #18181b;
-            color: #e4e4e7;
-            font-family: monospace;
-            font-size: 12px;
-            padding: 4px 10px;
-            border-radius: 4px;
-            margin-top: 15px;
-            font-weight: bold;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="email-container">
-          <div class="header">
-            <h1>EDITORS<span style="color: #ffffff;">MEGA</span></h1>
+    const emailHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Order Authorized! EditorsMega</title>
+      <style>
+        body {
+          font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+          background-color: #050505;
+          color: #e4e4e7;
+          margin: 0;
+          padding: 0;
+        }
+        .email-container {
+          max-width: 600px;
+          margin: 40px auto;
+          background-color: #0c0c0e;
+          border: 1px solid #27272a;
+          border-radius: 16px;
+          overflow: hidden;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .header {
+          background-image: linear-gradient(135deg, #7c3aed 0%, #d946ef 50%, #f97316 100%);
+          padding: 40px 20px;
+          text-align: center;
+        }
+        .header h1 {
+          color: #ffffff;
+          margin: 0;
+          font-size: 28px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 2px;
+        }
+        .content {
+          padding: 30px 40px;
+        }
+        .greeting {
+          font-size: 18px;
+          font-weight: bold;
+          color: #ffffff;
+          margin-bottom: 10px;
+        }
+        .message {
+          font-size: 14px;
+          color: #a1a1aa;
+          line-height: 1.6;
+          margin-bottom: 25px;
+        }
+        .download-cabinet {
+          background-color: #050505;
+          border: 1px solid #1f1f23;
+          border-radius: 12px;
+          padding: 20px;
+          margin-bottom: 25px;
+        }
+        .download-cabinet h2 {
+          font-size: 13px;
+          font-family: monospace;
+          color: #a78bfa;
+          margin-top: 0;
+          margin-bottom: 15px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+        .download-row {
+          display: block;
+          background-color: #0c0c0e;
+          border: 1px solid #18181b;
+          border-radius: 8px;
+          padding: 12px 16px;
+          margin-bottom: 10px;
+          text-decoration: none;
+          color: #ffffff;
+          font-size: 13px;
+          font-weight: 500;
+          transition: all 0.2s;
+        }
+        .download-row:hover {
+          border-color: #7c3aed;
+          background-color: #101014;
+        }
+        .support-footer {
+          border-top: 1px solid #18181b;
+          padding-top: 20px;
+          text-align: center;
+          font-size: 11px;
+          color: #52525b;
+          line-height: 1.5;
+          margin-top: 25px;
+        }
+        .license-code {
+          display: inline-block;
+          background-color: #18181b;
+          color: #e4e4e7;
+          font-family: monospace;
+          font-size: 12px;
+          padding: 4px 10px;
+          border-radius: 4px;
+          margin-top: 15px;
+          font-weight: bold;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="email-container">
+        <div class="header">
+          <h1>EDITORS<span style="color: #ffffff;">MEGA</span></h1>
+        </div>
+        <div class="content">
+          <div class="greeting">Congratulations ${name}! Key Unlocked.</div>
+          <div class="message">
+            Your purchase of the <strong>Video Editing Mega Bundle</strong> ($9.00 lifetime access) has been approved and authorized. 
+            <br/><br/>
+            Your assets and download links are prepared inside your dedicated Google Drive master directories. Click the directory links below to start importing immediate resources into Premiere Pro, After Effects, DaVinci Resolve, or Final Cut.
           </div>
-          <div class="content">
-            <div class="greeting">Congratulations ${name}! Key Unlocked.</div>
-            <div class="message">
-              Your purchase of the <strong>Video Editing Mega Bundle</strong> ($9.00 lifetime access) has been approved and authorized. 
-              <br/><br/>
-              Your assets and download links are prepared inside your dedicated Google Drive master directories. Click the directory links below to start importing immediate resources into Premiere Pro, After Effects, DaVinci Resolve, or Final Cut.
-            </div>
+          
+          <div class="download-cabinet">
+            <h2>Secure Digital Delivery Cabinet</h2>
             
-            <div class="download-cabinet">
-              <h2>Secure Digital Delivery Cabinet</h2>
-              
-              <a class="download-row" href="${DELIVERY_CONFIG.ALL_IN_ONE_DOWNLOAD_LINK}" target="_blank" style="background-color: #10b981; border: 1px solid #10b981; color: #000000; font-weight: bold; text-align: center; text-decoration: none; display: block; padding: 14px; border-radius: 8px; margin-bottom: 12px; font-size: 14px;">
-                ⚡ DOWNLOAD ALL-IN-ONE EDITING PACK (56 GB)
-              </a>
-              
-              <a class="download-row" href="${process.env.APP_URL || 'http://localhost:3000'}/vault?code=VEMB-2026-X779A" target="_blank" style="text-align: center; display: block;">
-                📁 EXPLORE INDIVIDUAL CABINETS & MODULES
-              </a>
-            </div>
+            <a class="download-row" href="${DELIVERY_CONFIG.ALL_IN_ONE_DOWNLOAD_LINK}" target="_blank" style="background-color: #10b981; border: 1px solid #10b981; color: #000000; font-weight: bold; text-align: center; text-decoration: none; display: block; padding: 14px; border-radius: 8px; margin-bottom: 12px; font-size: 14px;">
+              ⚡ DOWNLOAD ALL-IN-ONE EDITING PACK (56 GB)
+            </a>
+            
+            <a class="download-row" href="${process.env.APP_URL || 'http://localhost:3000'}/vault?code=VEMB-2026-X779A" target="_blank" style="text-align: center; display: block;">
+              📁 EXPLORE INDIVIDUAL CABINETS & MODULES
+            </a>
+          </div>
 
-            <div style="text-align: center; margin-bottom: 25px;">
-              <div style="font-size: 11px; color: #71717a; text-transform: uppercase; letter-spacing: 1px;">YOUR REGISTERED REGISTRATION / LICENSE CODE</div>
-              <span class="license-code">VEMB-2026-X779A</span>
-            </div>
+          <div style="text-align: center; margin-bottom: 25px;">
+            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; letter-spacing: 1px;">YOUR REGISTERED REGISTRATION / LICENSE CODE</div>
+            <span class="license-code">VEMB-2026-X779A</span>
+          </div>
 
-            <div class="support-footer">
-              If you have any questions or require customization support for your rendering nodes, write our response desk at support@editorsmega.com.
-              <br/><br/>
-              © 2026 EditorsMega Inc. Fully royalty-free and commercial use licensed.
-            </div>
+          <div class="support-footer">
+            If you have any questions or require customization support for your rendering nodes, write our response desk at support@editorsmega.com.
+            <br/><br/>
+            © 2026 EditorsMega Inc. Fully royalty-free and commercial use licensed.
           </div>
         </div>
-      </body>
-      </html>
-      `;
+      </div>
+    </body>
+    </html>
+    `;
 
-      // Check if SMTP is configured
-      if (!smtpUser || !smtpPass) {
-        console.warn("[Checkout SMTP] Warning: SMTP email configurations (SMTP_USER / SMTP_PASS) are not populated in environment secrets.");
-        return res.status(200).json({
-          status: "success",
-          token: secureToken,
-          delivered: false,
-          warning: "SMTP Credentials not configured. Using fallback sandbox fulfillment.",
-          message: `Your sandbox order was successfully authorized! To send actual emails, please go to the 'Secrets / Environment' panel in Google AI Studio and configure SMTP_USER and SMTP_PASS.`,
-          details: { name, email, paymentMethod }
-        });
-      }
+    // Check if SMTP is configured
+    if (!smtpUser || !smtpPass) {
+      console.warn("[Checkout SMTP] Warning: SMTP email configurations (SMTP_USER / SMTP_PASS) are not populated in environment secrets.");
+      return {
+        secureToken,
+        delivered: false,
+        warning: "SMTP Credentials not configured. Using fallback sandbox fulfillment.",
+        message: `Your sandbox order was successfully authorized! To send actual emails, please go to the 'Secrets / Environment' panel in Google AI Studio and configure SMTP_USER and SMTP_PASS.`,
+        details: { name, email, paymentMethod }
+      };
+    }
 
-      // Create reusable transporter object using SSL/TLS
+    try {
       const transporter = nodemailer.createTransport({
         host: smtpHost,
         port: smtpPort,
@@ -411,7 +455,6 @@ async function startServer() {
         },
       });
 
-      // Send mail with defined transport object
       const info = await transporter.sendMail({
         from: `"${fromName}" <${smtpUser}>`,
         to: email,
@@ -420,12 +463,42 @@ async function startServer() {
       });
 
       console.log(`[Checkout API] Email successfully delivered to ${email}. MessageId: ${info.messageId}`);
-      return res.status(200).json({
-        status: "success",
-        token: secureToken,
+      return {
+        secureToken,
         delivered: true,
         messageId: info.messageId,
         message: "A secure download link has been sent directly to your registered email address!"
+      };
+    } catch (error: any) {
+      console.error("[Checkout SMTP Error]", error);
+      return {
+        secureToken,
+        delivered: false,
+        error: error.message,
+        message: "Payment success, but email delivery encountered a terminal SMTP failure. Access has been generated."
+      };
+    }
+  }
+
+  // API Route for confirming order and sending Nodemailer email
+  app.post("/api/checkout", rateLimiter(60 * 1000, 15), async (req, res) => {
+    try {
+      const { name, email, paymentMethod } = req.body;
+
+      if (!email || !name) {
+        return res.status(400).json({ error: "Missing name or email address" });
+      }
+
+      console.log(`[Checkout API] Processing order for ${name} (${email}) using ${paymentMethod}`);
+      const fulfillmentResult = await fulfillOrder(name, email, paymentMethod || "card");
+      
+      return res.status(200).json({
+        status: "success",
+        token: fulfillmentResult.secureToken,
+        delivered: fulfillmentResult.delivered,
+        messageId: (fulfillmentResult as any).messageId,
+        warning: (fulfillmentResult as any).warning,
+        message: fulfillmentResult.message
       });
 
     } catch (error: any) {
@@ -438,21 +511,65 @@ async function startServer() {
   });
 
   // Verify signed token endpoint
-  app.post("/api/verify-payment", rateLimiter(60 * 1000, 45), (req, res) => {
-    const { token } = req.body;
-    if (!token) {
-      return res.status(400).json({ success: false, error: "Token missing" });
+  app.post("/api/verify-payment", rateLimiter(60 * 1000, 45), async (req, res) => {
+    const { token, razorpay_payment_id, razorpay_order_id, razorpay_signature, name, email } = req.body;
+    
+    // Existing token verification flow
+    if (token) {
+      const payload = verifySecureToken(token);
+      if (payload && payload.paid) {
+        return res.status(200).json({
+          success: true,
+          name: payload.name,
+          email: payload.email,
+          timestamp: payload.timestamp
+        });
+      }
+      return res.status(401).json({ success: false, error: "Invalid payment credentials token." });
     }
-    const payload = verifySecureToken(token);
-    if (payload && payload.paid) {
+
+    // Razorpay standard signature verification flow
+    if (razorpay_payment_id || razorpay_order_id || razorpay_signature) {
+      if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+        return res.status(400).json({ success: false, error: "Missing required Razorpay payment signature parameters." });
+      }
+
+      if (!email || !name) {
+        return res.status(400).json({ success: false, error: "Missing customer name or email details for fulfillment." });
+      }
+
+      const rawKeySecret = process.env.RAZORPAY_KEY_SECRET || "rDi0dwvg2BoYlRswmCb5mfAq";
+      const keySecret = rawKeySecret.trim().replace(/^["']|["']$/g, "");
+      if (!keySecret) {
+        console.error("[Verify API] RAZORPAY_KEY_SECRET is not configured on server.");
+        return res.status(500).json({ success: false, error: "Server credentials configuration missing." });
+      }
+
+      // Generate HMAC-SHA256 signature according to standard integration step
+      const generated_signature = crypto
+        .createHmac("sha256", keySecret)
+        .update(razorpay_order_id + "|" + razorpay_payment_id)
+        .digest("hex");
+
+      if (generated_signature !== razorpay_signature) {
+        console.warn(`[Verify API] Razorpay payment signature mismatch. Generated: ${generated_signature}, Received: ${razorpay_signature}`);
+        return res.status(400).json({ success: false, error: "Razorpay secure payment verification signature mismatch." });
+      }
+
+      console.info(`[Verify API] Razorpay payment signature verified successfully for order: ${razorpay_order_id}`);
+
+      // Perform unified order fulfillment (token generation + email shipment)
+      const fulfillment = await fulfillOrder(name, email, "razorpay");
+
       return res.status(200).json({
         success: true,
-        name: payload.name,
-        email: payload.email,
-        timestamp: payload.timestamp
+        token: fulfillment.secureToken,
+        delivered: fulfillment.delivered,
+        message: "Payment signature verified. Access credentials configured and dispatched!"
       });
     }
-    return res.status(401).json({ success: false, error: "Invalid payment credentials token." });
+
+    return res.status(400).json({ success: false, error: "Missing required verification parameters." });
   });
 
   // Verify license key endpoint
