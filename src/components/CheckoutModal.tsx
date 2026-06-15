@@ -417,7 +417,7 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -433,19 +433,19 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 15 }}
             transition={{ type: 'spring', duration: 0.5 }}
-            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-800 bg-[#0c0c0e] p-6 shadow-2xl md:p-8"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-800 bg-[#0c0c0e] p-6 shadow-2xl md:p-8 flex flex-col max-h-[85vh] sm:max-h-[88vh]"
           >
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 rounded-full bg-white/5 p-1.5 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+              className="absolute top-4 right-4 z-20 rounded-full bg-white/5 p-1.5 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
               aria-label="Close modal"
             >
               <X size={18} />
             </button>
 
             {!isSuccess ? (
-              <div>
+              <div className="flex-1 overflow-y-auto pr-2 -mr-2 space-y-4 scrollbar-thin min-h-0 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-zinc-950/20 [&::-webkit-scrollbar-thumb]:bg-zinc-800 [&::-webkit-scrollbar-thumb]:rounded-full">
                 {/* Header */}
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-2 select-none">
@@ -694,65 +694,67 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
               </div>
             ) : (
               /* Success delivery window */
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="text-center py-6"
-              >
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-400 to-green-600 text-white shadow-lg shadow-emerald-500/20 select-none">
-                  <Check size={28} className="stroke-[3]" />
-                </div>
-                <h3 className="text-2xl font-bold text-white font-display">Order Authorized!</h3>
-                <p className="text-sm text-zinc-300 mt-2">
-                  Congratulations <strong className="text-white">{name}</strong>! We have authenticated your digital credentials and sent your lifetime access dashboard links directly to <strong className="text-violet-400 font-mono font-medium">{email}</strong>.
-                </p>
-
-                {/* Instant Action File Download Panel */}
-                <div className="mt-8 rounded-2xl border border-zinc-850 p-5 text-left bg-gradient-to-b from-zinc-950 to-[#0e0e11]">
-                  <h4 className="text-xs font-mono font-bold tracking-wider text-violet-400 uppercase mb-3 flex items-center gap-1 select-none">
-                    <Sparkles size={12} /> INSTANT SECURE FILE DOWNLOAD CABINET
-                  </h4>
-                  <p className="text-[11px] text-zinc-450 mb-4">
-                    Skip email latency. You can trigger the main direct downloads right here from this secure workspace instant sandbox token block.
-                  </p>
-
-                  <div className="space-y-2.5 pb-2">
-                    {[
-                      { assetId: 'cabinet-1', name: '1. PRESETS & LUTs PACK (Direct Mirror Link)', size: '2.4 GB', color: 'text-violet-400' },
-                      { assetId: 'cabinet-2', name: '2. HOLLYWOOD SFX LIBRARY (WAV Master)', size: '1.8 GB', color: 'text-fuchsia-400' },
-                      { assetId: 'cabinet-3', name: '3. MOGRT TITLES & SVG INSTANTS', size: '940 MB', color: 'text-orange-400' },
-                      { assetId: 'cabinet-4', name: '4. INSTALLATION TUTORIAL MANUALS (PDF)', size: '18 MB', color: 'text-emerald-400' }
-                    ].map((file, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => downloadSecureAsset(file.assetId)}
-                        disabled={downloadingAssetId === file.assetId}
-                        className="w-full flex items-center justify-between rounded-lg bg-black/40 border border-zinc-900 p-2.5 hover:border-zinc-800 hover:bg-black/60 transition-all text-xs text-zinc-200 group cursor-pointer text-left disabled:opacity-50"
-                      >
-                        <span className="truncate pr-4 group-hover:text-white transition-colors">
-                          📁 {downloadingAssetId === file.assetId ? 'Authorizing secure download...' : file.name}
-                        </span>
-                        <span className={`font-mono text-[10px] font-bold ${file.color}`}>
-                          {file.size}
-                        </span>
-                      </button>
-                    ))}
+              <div className="flex-1 overflow-y-auto pr-2 -mr-2 scrollbar-thin min-h-0 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-zinc-950/20 [&::-webkit-scrollbar-thumb]:bg-zinc-800 [&::-webkit-scrollbar-thumb]:rounded-full">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="text-center py-6"
+                >
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-400 to-green-600 text-white shadow-lg shadow-emerald-500/20 select-none">
+                    <Check size={28} className="stroke-[3]" />
                   </div>
-                </div>
-
-                <div className="mt-8">
-                  <button
-                    onClick={onClose}
-                    className="rounded-xl w-full bg-zinc-850 hover:bg-zinc-800 py-2.5 text-xs font-semibold text-white transition-colors uppercase tracking-wider cursor-pointer"
-                  >
-                    Return to landing page
-                  </button>
-                  <p className="text-[10px] text-zinc-500 mt-3 select-none">
-                    Your licenses are registered under code: <strong className="text-zinc-400">VEMB-2026-X779A</strong>
+                  <h3 className="text-2xl font-bold text-white font-display">Order Authorized!</h3>
+                  <p className="text-sm text-zinc-300 mt-2">
+                    Congratulations <strong className="text-white">{name}</strong>! We have authenticated your digital credentials and sent your lifetime access dashboard links directly to <strong className="text-violet-400 font-mono font-medium">{email}</strong>.
                   </p>
-                </div>
-              </motion.div>
+
+                  {/* Instant Action File Download Panel */}
+                  <div className="mt-8 rounded-2xl border border-zinc-850 p-5 text-left bg-gradient-to-b from-zinc-950 to-[#0e0e11]">
+                    <h4 className="text-xs font-mono font-bold tracking-wider text-violet-400 uppercase mb-3 flex items-center gap-1 select-none">
+                      <Sparkles size={12} /> INSTANT SECURE FILE DOWNLOAD CABINET
+                    </h4>
+                    <p className="text-[11px] text-zinc-450 mb-4">
+                      Skip email latency. You can trigger the main direct downloads right here from this secure workspace instant sandbox token block.
+                    </p>
+
+                    <div className="space-y-2.5 pb-2">
+                      {[
+                        { assetId: 'cabinet-1', name: '1. PRESETS & LUTs PACK (Direct Mirror Link)', size: '2.4 GB', color: 'text-violet-400' },
+                        { assetId: 'cabinet-2', name: '2. HOLLYWOOD SFX LIBRARY (WAV Master)', size: '1.8 GB', color: 'text-fuchsia-400' },
+                        { assetId: 'cabinet-3', name: '3. MOGRT TITLES & SVG INSTANTS', size: '940 MB', color: 'text-orange-400' },
+                        { assetId: 'cabinet-4', name: '4. INSTALLATION TUTORIAL MANUALS (PDF)', size: '18 MB', color: 'text-emerald-400' }
+                      ].map((file, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => downloadSecureAsset(file.assetId)}
+                          disabled={downloadingAssetId === file.assetId}
+                          className="w-full flex items-center justify-between rounded-lg bg-black/40 border border-zinc-900 p-2.5 hover:border-zinc-800 hover:bg-black/60 transition-all text-xs text-zinc-200 group cursor-pointer text-left disabled:opacity-50"
+                        >
+                          <span className="truncate pr-4 group-hover:text-white transition-colors">
+                            📁 {downloadingAssetId === file.assetId ? 'Authorizing secure download...' : file.name}
+                          </span>
+                          <span className={`font-mono text-[10px] font-bold ${file.color}`}>
+                            {file.size}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-8">
+                    <button
+                      onClick={onClose}
+                      className="rounded-xl w-full bg-zinc-850 hover:bg-zinc-800 py-2.5 text-xs font-semibold text-white transition-colors uppercase tracking-wider cursor-pointer"
+                    >
+                      Return to landing page
+                    </button>
+                    <p className="text-[10px] text-zinc-550 mt-3 select-none">
+                      Your licenses are registered under code: <strong className="text-zinc-400">VEMB-2026-X779A</strong>
+                    </p>
+                  </div>
+                </motion.div>
+              </div>
             )}
 
             {/* Seamless Razorpay Checkout Sandbox Simulator Overlay */}
