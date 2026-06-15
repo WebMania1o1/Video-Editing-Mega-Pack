@@ -5,6 +5,7 @@ import {
   Tv, Activity, Clock, ArrowLeft, FolderClosed, Volume2, 
   Palette, RefreshCw, Zap, Image, Video, HelpCircle, HardDrive, Sparkles
 } from 'lucide-react';
+import { DELIVERY_CONFIG } from '../config/delivery-config';
 
 interface MembersVaultProps {
   customerName: string;
@@ -553,7 +554,7 @@ export default function MembersVault({ customerName, customerEmail, onBackToLand
 
               {/* Secure Download Pack Wrapper Button */}
               <a 
-                href="https://drive.google.com/file/d/1sIJ5rWp0Gv-oSZGCnGwJ2N_EKtgUT0I2/view?usp=drive_link" 
+                href={DELIVERY_CONFIG.ALL_IN_ONE_DOWNLOAD_LINK} 
                 target="_blank" 
                 rel="noreferrer"
                 className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-115 px-6 py-3.5 text-xs font-bold text-black uppercase tracking-widest transition-all shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/25 active:scale-[0.98] shrink-0 text-center flex items-center justify-center gap-2 group cursor-pointer"

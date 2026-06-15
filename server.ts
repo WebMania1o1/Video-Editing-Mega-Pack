@@ -5,37 +5,12 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import fs from "fs";
 import crypto from "crypto";
+import { DELIVERY_CONFIG } from "./src/config/delivery-config";
 
 dotenv.config();
 
-// Private mapper of premium assets - not exposed to browser bundle!
-const PREMIUM_DOWNLOADS: Record<string, string> = {
-  "master-bundle": "https://drive.google.com/file/d/1sIJ5rWp0Gv-oSZGCnGwJ2N_EKtgUT0I2/view?usp=drive_link",
-  "high-definition-3d": "https://drive.google.com/drive/folders/1ZZ7F2K15h-xa2HvZsyjMrssbFuQ5ApoX?usp=drive_link",
-  "motion-graphic-fx-pack": "https://drive.google.com/drive/folders/1i6ZkumLWPGYZT4xOJ3x2b9jwo6mlK6PI",
-  "mavic-luts": "https://drive.google.com/drive/folders/16o2za632lIzOetXMJlYGg2yv7wKMcfvF",
-  "free-sound-fx": "https://drive.google.com/drive/folders/1pJfy2AhAxdBNBuFuPcat3SkvOXqwjnHX",
-  "paper-rip-fx": "https://drive.google.com/drive/folders/1i_hpdKzfqfzED0wiEygh-mlff76Uyq4x?usp=drive_link",
-  "smoke-fx": "https://drive.google.com/drive/folders/1Cqy-hZrzcWQOMqBb9S1j0rlMQdrlR7JD",
-  "title-card-fx": "https://drive.google.com/drive/folders/1CJ577VzDuntaGD10RDtgE9ISHAs4JI7O",
-  "free-2dfx": "https://drive.google.com/drive/folders/1XrJF8uFz3ig71fjsygdgwLr8jOMo2nWj?usp=drive_link",
-  "holiday-fx": "https://drive.google.com/drive/folders/1NRxFNarAmC6ayoZCbblo7sMK8vh9Nofv",
-  "scribble-fx": "https://drive.google.com/drive/folders/1FzOAN5OgqmtwdMRROLTvU2H3RcCaNZ_H?usp=drive_link",
-  "ae-plugins": "https://drive.google.com/drive/folders/11NFGXFS8yE1DmaP1TtmVQWkWaGUdAc1j?usp=drive_link",
-  "background-music": "https://drive.google.com/drive/folders/1o3vTcQXIHZk3cbz9eWJtObUG4te8-25G",
-  "background-video-animation": "https://drive.google.com/drive/folders/1JIL9n3Q8r2fCK_jISQH9RkSV4sDxaQVH",
-  "dust-snow-overlay": "https://drive.google.com/drive/folders/1IgW4RP5XoEiE46HYsxVKywvXF3z6X2Y9",
-  "premiere-pro-transition": "https://drive.google.com/drive/folders/1_waNts06ntc4FK5mTxai6gk_sA2zOE_O",
-  "premiere-pro-effects-preset": "https://drive.google.com/drive/folders/1vf5yaHwT1uKWzn8EWpFopuS4PlYRJmTj",
-  "fire-sparks-sfx": "https://drive.google.com/drive/folders/1fA_bY94bv920sZS8MTyYTR63PuaYPQOg",
-  "seamless-motion-transitions": "https://drive.google.com/drive/folders/1_1uibCxaHjzoCM3-9IARY5k4CuOs3XRx?usp=drive_link",
-  "chroma-key-green-screen": "https://drive.google.com/drive/folders/13RgZrrTUrq_UyMhft-l60Aow65KXhNNd?usp=drive_link",
-  "cyberpunk-grid-overlays": "https://drive.google.com/drive/folders/1njKTkkYmDvF3YN2dk4KMmXlgFaUkJp8J?usp=drive_link",
-  "cabinet-1": "https://drive.google.com/drive/folders/16o2za632lIzOetXMJlYGg2yv7wKMcfvF",
-  "cabinet-2": "https://drive.google.com/drive/folders/1pJfy2AhAxdBNBuFuPcat3SkvOXqwjnHX",
-  "cabinet-3": "https://drive.google.com/drive/folders/1CJ577VzDuntaGD10RDtgE9ISHAs4JI7O",
-  "cabinet-4": "https://drive.google.com/drive/folders/1njKTkkYmDvF3YN2dk4KMmXlgFaUkJp8J"
-};
+// Private mapper of premium assets - dynamically sourced from centralized configuration file
+const PREMIUM_DOWNLOADS = DELIVERY_CONFIG.PREMIUM_DOWNLOADS_DATABASE;
 
 const SESSION_SECRET = process.env.PAYMENT_SESSION_SECRET || "vemb_production_gated_secret_2026_xyz";
 
@@ -246,13 +221,13 @@ async function startServer() {
       };
       const secureToken = createSecureToken(tokenPayload);
 
-      const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
-      const smtpPort = parseInt(process.env.SMTP_PORT || "465", 10);
-      const smtpUser = process.env.SMTP_USER || "";
-      const smtpPass = process.env.SMTP_PASS || "";
-      const fromName = process.env.FROM_NAME || "EditorsMega Team";
+      const smtpHost = process.env.SMTP_HOST || DELIVERY_CONFIG.SMTP.DEFAULT_HOST;
+      const smtpPort = parseInt(process.env.SMTP_PORT || String(DELIVERY_CONFIG.SMTP.DEFAULT_PORT), 10);
+      const smtpUser = process.env.SMTP_USER || DELIVERY_CONFIG.SMTP.DEFAULT_SENDER_USER;
+      const smtpPass = process.env.SMTP_PASS || DELIVERY_CONFIG.SMTP.DEFAULT_SENDER_PASS;
+      const fromName = process.env.FROM_NAME || DELIVERY_CONFIG.SMTP.DEFAULT_FROM_NAME;
 
-      const emailSubject = `🚀 Your Video Editing Mega Bundle is Ready, ${name}!`;
+      const emailSubject = (DELIVERY_CONFIG.SMTP.EMAIL_SUBJECT || `🚀 Your Video Editing Mega Bundle is Ready, {name}!`).replace("{name}", name);
 
       // Master design of the email template
       const emailHtml = `
@@ -387,8 +362,12 @@ async function startServer() {
             <div class="download-cabinet">
               <h2>Secure Digital Delivery Cabinet</h2>
               
-              <a class="download-row" href="${process.env.APP_URL || 'http://localhost:3000'}/vault?code=VEMB-2026-X779A" target="_blank">
-                📁 DOWNLOAD CABINET PORTAL ACCESS
+              <a class="download-row" href="${DELIVERY_CONFIG.ALL_IN_ONE_DOWNLOAD_LINK}" target="_blank" style="background-color: #10b981; border: 1px solid #10b981; color: #000000; font-weight: bold; text-align: center; text-decoration: none; display: block; padding: 14px; border-radius: 8px; margin-bottom: 12px; font-size: 14px;">
+                ⚡ DOWNLOAD ALL-IN-ONE EDITING PACK (56 GB)
+              </a>
+              
+              <a class="download-row" href="${process.env.APP_URL || 'http://localhost:3000'}/vault?code=VEMB-2026-X779A" target="_blank" style="text-align: center; display: block;">
+                📁 EXPLORE INDIVIDUAL CABINETS & MODULES
               </a>
             </div>
 
