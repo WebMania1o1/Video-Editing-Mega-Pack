@@ -2,7 +2,7 @@ import Razorpay from "razorpay";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
-import { DELIVERY_CONFIG } from "../src/config/delivery-config";
+import { DELIVERY_CONFIG } from "./delivery-config";
 
 dotenv.config({ override: true });
 
