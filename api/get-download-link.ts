@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { verifySecureToken } from "./_utils";
+import { verifySecureToken } from "./utils";
 import { DELIVERY_CONFIG } from "../src/config/delivery-config";
 
 const PREMIUM_DOWNLOADS = DELIVERY_CONFIG.PREMIUM_DOWNLOADS_DATABASE;

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "crypto";
-import { verifySecureToken, getRazorpayKeys, fulfillOrder } from "./_utils";
+import { verifySecureToken, getRazorpayKeys, fulfillOrder } from "./utils";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
