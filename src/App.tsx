@@ -369,7 +369,7 @@ export default function App() {
         {/* Cinematic Video Editing Workstation Background */}
         <div className="absolute top-0 left-0 w-full h-[780px] md:h-[980px] overflow-hidden">
           <img 
-            src="https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=1920&q=80"
+            src="/images/background.webp"
             alt="Professional Video Editing Studio Setup"
             className="w-full h-full object-cover opacity-[0.14] saturate-[0.8] contrast-[1.1]"
             referrerPolicy="no-referrer"
