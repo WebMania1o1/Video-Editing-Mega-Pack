@@ -105,6 +105,30 @@ export default function App() {
 
   // Verify license or existing token on initial render mount
   useEffect(() => {
+    // Helper to decode and verify JWT payload timestamp (1-hour expiration)
+    const isTokenExpired = (t: string): boolean => {
+      try {
+        const parts = t.split('.');
+        if (parts.length !== 3) return true;
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          window.atob(base64)
+            .split('')
+            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        const payload = JSON.parse(jsonPayload);
+        if (payload && payload.timestamp) {
+          const oneHour = 60 * 60 * 1000;
+          return Date.now() - payload.timestamp > oneHour;
+        }
+        return false;
+      } catch (e) {
+        return true;
+      }
+    };
+
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code') || params.get('license');
     if (code) {
@@ -134,6 +158,14 @@ export default function App() {
     } else {
       const token = localStorage.getItem('vemb_token');
       if (token) {
+        if (isTokenExpired(token)) {
+          console.warn("Session token expired upon page mount.");
+          localStorage.removeItem('vemb_token');
+          setSessionToken('');
+          setHasPurchased(false);
+          return;
+        }
+
         fetch('/api/verify-payment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -157,6 +189,46 @@ export default function App() {
         });
       }
     }
+  }, []);
+
+  // Periodic interval effect to kick out active sessions when 1 hour is reached
+  useEffect(() => {
+    const checkExpiration = () => {
+      const token = localStorage.getItem('vemb_token');
+      if (token) {
+        try {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const base64Url = parts[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(
+              window.atob(base64)
+                .split('')
+                .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join('')
+            );
+            const payload = JSON.parse(jsonPayload);
+            if (payload && payload.timestamp) {
+              const oneHour = 60 * 60 * 1000;
+              if (Date.now() - payload.timestamp > oneHour) {
+                console.warn("[Session Guard] 1-hour session duration exceeded. Wiping details.");
+                localStorage.removeItem('vemb_token');
+                setSessionToken('');
+                setHasPurchased(false);
+                alert("Your secure 1-hour download vault session has expired. Access to assets is now locked. Please purchase or verify license again.");
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to execute periodic session verification:", e);
+        }
+      }
+    };
+
+    // Run immediately and then every 10 seconds
+    checkExpiration();
+    const interval = setInterval(checkExpiration, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   // Scarcity Live Timer (Minutes and Seconds)
@@ -304,14 +376,14 @@ export default function App() {
           />
           {/* Fades to prevent text distraction and handle bottom blending */}
           <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-[#050505]/50 to-[#050505]" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-[#050505]/80" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-[#050505]" />
           <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-transparent to-[#050505]" />
         </div>
 
         {/* Glowing floating ambient orbs */}
         <div className="absolute top-[-10%] left-[-20%] w-[80%] h-[60%] rounded-full bg-violet-900/10 blur-[150px] ambient-glow" />
-        <div className="absolute top-[30%] right-[-10%] w-[60%] h-[50%] rounded-full bg-fuchsia-950/5 blur-[160px] ambient-glow" style={{ animationDelay: '2s' }} />
-        <div className="absolute bottom-[10%] left-[10%] w-[70%] h-[50%] rounded-full bg-purple-950/10 blur-[140px] ambient-glow" style={{ animationDelay: '4s' }} />
+        <div className="absolute top-[30%] right-[-10%] w-[60%] h-[50%] rounded-full bg-fuchsia-955/5 blur-[160px] ambient-glow" style={{ animationDelay: '2s' }} />
+        <div className="absolute bottom-[10%] left-[10%] w-[70%] h-[50%] rounded-full bg-purple-955/10 blur-[140px] ambient-glow" style={{ animationDelay: '4s' }} />
         
         {/* Aesthetic grid overlay */}
         <div 
@@ -363,7 +435,7 @@ export default function App() {
               whileHover={{ scale: 1.03, backgroundColor: '#27272a' }}
               whileTap={{ scale: 0.97 }}
               onClick={() => setIsCheckoutOpen(true)}
-              className="rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/80 px-4 py-1.5 text-xs font-semibold text-zinc-300 hover:text-white transition-all active:scale-[0.98] cursor-pointer"
+              className="rounded-lg bg-zinc-900 border border-zinc-805 hover:border-zinc-705 hover:bg-zinc-800/80 px-4 py-1.5 text-xs font-semibold text-zinc-300 hover:text-white transition-all active:scale-[0.98] cursor-pointer"
             >
               Verify License
             </motion.button>
@@ -388,7 +460,7 @@ export default function App() {
           variants={animContainer}
           className="lg:col-span-7 space-y-6"
         >
-          <motion.div variants={animItem} className="inline-flex items-center gap-2 rounded-full bg-violet-950/20 border border-violet-800/30 px-3.5 py-1 text-slate-300">
+          <motion.div variants={animItem} className="inline-flex items-center gap-2 rounded-full bg-violet-955/20 border border-violet-800/30 px-3.5 py-1 text-slate-300">
             <span className="flex h-1.5 w-1.5 rounded-full bg-violet-400 animate-ping" />
             <span className="text-[10px] font-mono tracking-widest uppercase font-bold text-violet-400">
               THE ULTIMATE CREATIVE ASSET VAULT
@@ -450,7 +522,7 @@ export default function App() {
               whileHover={{ scale: 1.025, backgroundColor: '#27272a' }}
               whileTap={{ scale: 0.975 }}
               href="#whats-included"
-              className="rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-750 hover:bg-zinc-800 px-8 py-4 text-xs font-bold tracking-wider text-zinc-300 hover:text-white transition-all flex items-center justify-center gap-2 uppercase"
+              className="rounded-xl bg-zinc-900 border border-zinc-805 hover:border-zinc-705 hover:bg-zinc-800 px-8 py-4 text-xs font-bold tracking-wider text-zinc-300 hover:text-white transition-all flex items-center justify-center gap-2 uppercase"
             >
               View Bundle Contents <ChevronDown size={14} />
             </motion.a>
@@ -480,7 +552,7 @@ export default function App() {
           className="lg:col-span-5 relative mt-8 lg:mt-0"
         >
           <div className="absolute inset-0 bg-gradient-to-tr from-violet-600/10 to-orange-500/5 blur-[80px] rounded-3xl" />
-          <div className="relative rounded-2xl border border-zinc-850 bg-[#0c0c0e] p-6 md:p-8 shadow-2xl">
+          <div className="relative rounded-2xl border border-zinc-805 bg-[#0c0c0e] p-6 md:p-8 shadow-2xl">
             {/* Live activity indicator badge */}
             <div className="absolute -top-3.5 right-6 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-full px-3 py-1 text-[9px] font-bold tracking-widest text-white uppercase shadow-md flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-white animate-ping" />
@@ -501,7 +573,7 @@ export default function App() {
                   <div className="absolute bottom-12 left-8 h-6 w-16 rounded border border-zinc-805 flex items-center justify-center text-[8px] text-zinc-500 font-mono uppercase tracking-wider">PRESET CORE</div>
 
                   <div className="text-center space-y-2 z-10">
-                    <span className="rounded-full bg-violet-950/60 text-violet-400 text-[10px] font-mono px-3 py-0.5 tracking-wider uppercase font-bold">
+                    <span className="rounded-full bg-violet-955/60 text-violet-400 text-[10px] font-mono px-3 py-0.5 tracking-wider uppercase font-bold">
                       DOWNLOAD DIRECTORY
                     </span>
                     <h3 className="text-2xl font-bold font-display text-white tracking-tight uppercase leading-none">
@@ -523,7 +595,7 @@ export default function App() {
                         <span className="text-[8px] font-mono text-zinc-500">6.42 GB • Fully Verified</span>
                       </div>
                     </div>
-                    <span className="text-[9px] font-mono text-violet-400 font-bold bg-violet-950/40 px-2 py-0.5 rounded">
+                    <span className="text-[9px] font-mono text-violet-400 font-bold bg-violet-955/40 px-2 py-0.5 rounded">
                       READY
                     </span>
                   </div>
@@ -539,7 +611,7 @@ export default function App() {
                   { title: '600+ Animated Titles & Icons', sub: 'Fully editable typography template overlays' }
                 ].map((item, i) => (
                   <div key={i} className="flex gap-3 text-left">
-                    <div className="h-5 w-5 shrink-0 rounded-full bg-violet-950/60 text-violet-400 flex items-center justify-center mt-0.5 border border-violet-800/10">
+                    <div className="h-5 w-5 shrink-0 rounded-full bg-violet-955/60 text-violet-400 flex items-center justify-center mt-0.5 border border-violet-800/10">
                       <Check size={11} className="stroke-[3]" />
                     </div>
                     <div>
@@ -551,7 +623,7 @@ export default function App() {
               </div>
 
               {/* Urgency Highlight badge */}
-              <div className="rounded-xl bg-violet-950/10 border border-violet-900/15 p-4 mt-2">
+              <div className="rounded-xl bg-violet-955/10 border border-violet-900/15 p-4 mt-2">
                 <div className="flex justify-between items-end mb-1">
                   <span className="text-[10px] font-bold text-zinc-400">TOTAL BUNDLE WORTH:</span>
                   <span className="text-xs text-zinc-500 line-through font-mono">$199.00</span>
@@ -624,7 +696,7 @@ export default function App() {
         className="relative z-10 max-w-7xl mx-auto px-4 md:px-8 py-20 md:py-28"
       >
         <div className="text-center space-y-3 mb-16">
-          <span className="rounded-full bg-violet-950/20 border border-violet-800/30 px-3.5 py-1 text-[9px] font-mono tracking-widest text-violet-400 uppercase font-black">
+          <span className="rounded-full bg-violet-955/20 border border-violet-800/30 px-3.5 py-1 text-[9px] font-mono tracking-widest text-violet-400 uppercase font-black">
             INSIDE THE VAULT
           </span>
           <h2 className="text-3xl md:text-5xl font-extrabold font-display tracking-tight text-white">
@@ -646,14 +718,14 @@ export default function App() {
                 borderColor: '#2d2d30',
                 boxShadow: '0 20px 30px -10px rgba(124, 58, 237, 0.12), 0 10px 20px -10px rgba(0, 0, 0, 0.5)' 
               }}
-              className="relative rounded-2xl border border-zinc-850 bg-[#0c0c0e] p-6 md:p-8 flex flex-col justify-between hover:bg-[#101012] transition-all group overflow-hidden"
+              className="relative rounded-2xl border border-zinc-805 bg-[#0c0c0e] p-6 md:p-8 flex flex-col justify-between hover:bg-[#101012] transition-all group overflow-hidden"
             >
               {/* Highlight subtle corner decor elements */}
               <div className="absolute top-0 right-0 h-16 w-16 bg-gradient-to-bl from-violet-500/5 to-transparent rounded-bl-3xl pointer-events-none" />
 
               <div>
                 <div className="flex justify-between items-start mb-6">
-                  <div className="h-10 w-10 rounded-xl bg-zinc-900/50 flex items-center justify-center text-violet-400 border border-zinc-800 group-hover:bg-violet-950/20 group-hover:border-violet-400/25 transition-all">
+                  <div className="h-10 w-10 rounded-xl bg-zinc-900/50 flex items-center justify-center text-violet-400 border border-zinc-800 group-hover:bg-violet-955/20 group-hover:border-violet-400/25 transition-all">
                     <IconRenderer name={asset.iconName} className="h-5 w-5" />
                   </div>
                   <div className="flex flex-col items-end">
@@ -749,7 +821,7 @@ export default function App() {
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
               className="lg:col-span-5 space-y-6"
             >
-              <span className="rounded-full bg-violet-955/25 border border-violet-850/30 px-3 py-1 text-[9px] font-mono tracking-widest text-violet-400 uppercase font-black">
+              <span className="rounded-full bg-violet-955/25 border border-violet-805/30 px-3 py-1 text-[9px] font-mono tracking-widest text-violet-400 uppercase font-black">
                 EFFICIENCY & RESULTS
               </span>
               <h2 className="text-3xl md:text-4xl font-extrabold font-display leading-tight text-white">
@@ -758,7 +830,7 @@ export default function App() {
               <p className="text-zinc-400 text-sm leading-relaxed">
                 As a creator or freelancer, your income is directly tied to your output. If you are starting every video edit project with empty timelines and spent hours digging for standard sound effects or mapping basic transitions, you are limiting your hourly potential.
               </p>
-              <div className="p-4 rounded-xl bg-[#0c0c0e] border border-zinc-850 max-w-md">
+              <div className="p-4 rounded-xl bg-[#0c0c0e] border border-zinc-805 max-w-md">
                 <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent font-mono text-2xl font-black block">10x Output</span>
                 <p className="text-xs text-zinc-400 mt-1">Our average user reports completing client video versions in under half the historical time, with immediate customer sign-off rates due to higher visual finish.</p>
               </div>
@@ -782,10 +854,10 @@ export default function App() {
                     borderColor: '#2d2d30', 
                     boxShadow: '0 15px 25px -10px rgba(0, 0, 0, 0.5)'
                   }}
-                  className="rounded-2xl border border-zinc-850 bg-[#0c0c0e] p-6 flex flex-col justify-between hover:border-zinc-750 transition-all"
+                  className="rounded-2xl border border-zinc-805 bg-[#0c0c0e] p-6 flex flex-col justify-between hover:border-zinc-705 transition-all"
                 >
                   <div>
-                    <div className="h-9 w-9 rounded-lg bg-violet-950/50 text-violet-400 flex items-center justify-center mb-4 border border-violet-800/20">
+                    <div className="h-9 w-9 rounded-lg bg-violet-955/50 text-violet-400 flex items-center justify-center mb-4 border border-violet-800/20">
                       <IconRenderer name={item.iconName} className="h-4.5 w-4.5" />
                     </div>
                     <h3 className="font-bold text-sm text-zinc-150 font-display tracking-tight">
@@ -817,7 +889,7 @@ export default function App() {
         className="relative z-10 max-w-7xl mx-auto px-4 md:px-8 py-20 md:py-28"
       >
         <div className="text-center space-y-3 mb-12">
-          <span className="rounded-full bg-violet-950/20 border border-violet-800/30 px-3.5 py-1 text-[9px] font-mono tracking-widest text-violet-400 uppercase font-black">
+          <span className="rounded-full bg-violet-955/20 border border-violet-800/30 px-3.5 py-1 text-[9px] font-mono tracking-widest text-violet-400 uppercase font-black">
             VISUAL PROOF PREVIEW
           </span>
           <h2 className="text-3xl md:text-5xl font-extrabold font-display tracking-tight text-white">
@@ -837,7 +909,7 @@ export default function App() {
               className={`rounded-full px-5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 selectedPreview.id === p.id
                   ? 'bg-white text-black shadow-lg shadow-white/5'
-                  : 'bg-zinc-900 border border-zinc-850 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80'
+                  : 'bg-zinc-900 border border-zinc-805 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80'
               }`}
             >
               {p.tag}
@@ -902,10 +974,10 @@ export default function App() {
                   borderColor: '#2d2d30',
                   boxShadow: '0 15px 25px -10px rgba(124, 58, 237, 0.08), 0 10px 15px -10px rgba(0, 0, 0, 0.5)'
                 }}
-                className="rounded-2xl border border-zinc-850 bg-[#0c0c0e] p-6 hover:bg-[#101012] transition-all flex flex-col justify-between group"
+                className="rounded-2xl border border-zinc-805 bg-[#0c0c0e] p-6 hover:bg-[#101012] transition-all flex flex-col justify-between group"
               >
                 <div>
-                  <div className="h-9 w-9 rounded-lg bg-violet-950/50 text-violet-400 flex items-center justify-center mb-5 border border-violet-800/20 transition-colors group-hover:bg-violet-900/30">
+                  <div className="h-9 w-9 rounded-lg bg-violet-955/50 text-violet-400 flex items-center justify-center mb-5 border border-violet-800/20 transition-colors group-hover:bg-violet-900/30">
                     <IconRenderer name={seg.iconName} className="h-4.5 w-4.5" />
                   </div>
                   <h3 className="font-bold text-sm text-zinc-150 font-display uppercase tracking-wider">
@@ -962,7 +1034,7 @@ export default function App() {
                 borderColor: '#2d2d30',
                 boxShadow: '0 15px 25px -10px rgba(0, 0, 0, 0.4)'
               }}
-              className="relative rounded-2xl border border-zinc-850 bg-[#0c0c0e] p-6 md:p-8 flex flex-col justify-between hover:border-zinc-750 transition-all bg-gradient-to-tr from-[#0c0c0e] via-[#0c0c0e] to-zinc-900/10"
+              className="relative rounded-2xl border border-zinc-805 bg-[#0c0c0e] p-6 md:p-8 flex flex-col justify-between hover:border-zinc-750 transition-all bg-gradient-to-tr from-[#0c0c0e] via-[#0c0c0e] to-zinc-900/10"
             >
               <div>
                 {/* Rating Stars */}
@@ -970,7 +1042,7 @@ export default function App() {
                   {[...Array(review.rating)].map((_, i) => (
                     <Star key={i} size={13} className="fill-violet-400 text-violet-400" />
                   ))}
-                  <span className="text-[10px] font-mono text-zinc-500 ml-1.5 uppercase font-black font-semibold">VERIFIED ACCESS BUYER</span>
+                  <span className="text-[10px] font-mono text-zinc-500 ml-1.5 uppercase font-semibold">VERIFIED ACCESS BUYER</span>
                 </div>
 
                 <p className="text-xs text-zinc-300 leading-relaxed italic">
@@ -1047,7 +1119,7 @@ export default function App() {
                 <motion.div 
                   key={faq.id} 
                   variants={animItem}
-                  className="rounded-xl border border-zinc-850 bg-[#0c0c0e]/60 overflow-hidden text-left transition-all hover:border-zinc-750"
+                  className="rounded-xl border border-zinc-855 bg-[#0c0c0e]/60 overflow-hidden text-left transition-all hover:border-zinc-755"
                 >
                   <button
                     onClick={() => setExpandedFaq(isExpanded ? null : faq.id)}
@@ -1160,7 +1232,7 @@ export default function App() {
               </div>
 
               {/* Countdown Urgency Warning in pricing block */}
-              <div className="rounded-lg bg-red-950/10 border border-red-900/15 p-2.5 flex items-center justify-between text-[11px] text-rose-300 select-none">
+              <div className="rounded-lg bg-red-955/10 border border-red-900/15 p-2.5 flex items-center justify-between text-[11px] text-rose-300 select-none">
                 <span className="font-bold flex items-center gap-1">
                   <Flame size={12} className="animate-pulse text-rose-400" /> PROMO EXPIRES IN:
                 </span>
@@ -1177,7 +1249,7 @@ export default function App() {
                 <div className="space-y-2.5">
                   {PRICING.features.map((feat, i) => (
                     <div key={i} className="flex gap-2.5 items-center text-xs">
-                      <div className="h-4.5 w-4.5 rounded-full bg-violet-950/45 text-violet-300 flex items-center justify-center shrink-0 border border-violet-800/10">
+                      <div className="h-4.5 w-4.5 rounded-full bg-violet-955/45 text-violet-300 flex items-center justify-center shrink-0 border border-violet-800/10">
                         <Check size={10} className="stroke-[3]" />
                       </div>
                       <span className="text-zinc-350 font-medium">{feat}</span>
@@ -1368,7 +1440,7 @@ export default function App() {
                 <span className="text-[10px] text-zinc-500">({activeNotification.location})</span>
               </div>
               <p className="text-[10px] text-zinc-400 leading-tight">
-                Instantly secured lifetime licenses for <strong className="text-violet-450 text-violet-400 font-semibold">Video Editing Mega Bundle</strong>
+                Instantly secured lifetime licenses for <strong className="text-violet-455 text-violet-400 font-semibold">Video Editing Mega Bundle</strong>
               </p>
               <div className="flex items-center gap-1 text-[8px] font-mono text-zinc-500 mt-1">
                 <Clock size={8} /> {activeNotification.timeAgo} • Verified Secured Purchase
