@@ -30,6 +30,16 @@ export function verifySecureToken(token: string) {
     if (signature !== expectedSignature) return null;
     
     const decodedBody = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    
+    // Strict 1-hour session expiration limit (3,600,000 milliseconds)
+    if (decodedBody && decodedBody.timestamp) {
+      const oneHour = 60 * 60 * 1000;
+      if (Date.now() - decodedBody.timestamp > oneHour) {
+        console.warn(`[Token Verification] Security token expired. Age: ${Math.round((Date.now() - decodedBody.timestamp) / 1000)}s`);
+        return null;
+      }
+    }
+    
     return decodedBody;
   } catch (e) {
     return null;
