@@ -480,10 +480,10 @@ export default function App() {
           <motion.div variants={animItem} className="flex flex-wrap gap-4 items-center pt-2 border-t border-zinc-900">
             <div className="flex -space-x-2.5">
               {[
-                'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=120&h=120&q=80',
-                'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=120&h=120&q=80',
-                'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=120&h=120&q=80',
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&h=120&q=80'
+                '/images/avatar4.webp',
+                '/images/avatar3.webp',
+                '/images/avatar2.webp',
+                '/images/avatar1.webp'
               ].map((avatar, i) => (
                 <img
                   key={i}
