@@ -628,16 +628,6 @@ export default function CheckoutModal({ isOpen, onClose, plan, onSuccess }: Chec
                     </div>
                   </div>
 
-                  {/* Integration instructions block for developer setting up */}
-                  <div className="rounded-lg bg-violet-955/10 border border-violet-850/15 p-3">
-                    <p className="text-[10px] text-violet-350 leading-relaxed flex gap-1.5">
-                      <Shield size={12} className="shrink-0 mt-0.5 text-violet-405 text-violet-400" />
-                      <span>
-                        <strong>Integration Note:</strong> This form processes real sandbox orders. You can configure individual custom payment redirect links (PayPal, or UPI alias) quickly. Simply locate and replace the parameters inside <code className="text-white hover:underline">/src/data.ts</code>.
-                      </span>
-                    </p>
-                  </div>
-
                   {/* Promo Input */}
                   <div className="flex gap-2">
                     <input
