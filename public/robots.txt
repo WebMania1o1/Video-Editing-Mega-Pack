@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /vault
+Disallow: /api/
+
+Sitemap: https://editorsmega.vercel.app/sitemap.xml
