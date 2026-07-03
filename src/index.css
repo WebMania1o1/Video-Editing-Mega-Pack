@@ -3,42 +3,38 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", "Inter", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-mono: ui-monospace, SFMono-Regular, monospace;
 }
 
 /* Custom elegant scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #050505;
-}
-::-webkit-scrollbar-thumb {
-  background: #18181b;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #27272a;
-}
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #050505; }
+::-webkit-scrollbar-thumb { background: #18181b; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #27272a; }
 
-html {
-  scroll-behavior: smooth;
-}
+html { scroll-behavior: smooth; }
 
-/* Custom glow animations */
+/*
+  PERFORMANCE FIX: Replaced filter:blur() with opacity only.
+  blur() forces GPU repaint on every frame causing "forced reflow".
+  This version uses only opacity + transform which are GPU-composited
+  and don't trigger layout recalculation.
+*/
 @keyframes pulseGlow {
   0%, 100% {
-    opacity: 0.25;
+    opacity: 0.2;
     transform: scale(1) translate(0, 0);
-    filter: blur(80px);
   }
   50% {
-    opacity: 0.45;
-    transform: scale(1.1) translate(20px, -10px);
-    filter: blur(100px);
+    opacity: 0.4;
+    transform: scale(1.08) translate(20px, -10px);
   }
 }
 
 .ambient-glow {
   animation: pulseGlow 12s infinite ease-in-out;
+  will-change: transform, opacity;
+  /* Use a large border-radius instead of blur for the soft glow effect */
+  border-radius: 50%;
+  filter: blur(80px);
 }
