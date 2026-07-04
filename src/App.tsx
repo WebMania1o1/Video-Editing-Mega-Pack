@@ -365,6 +365,8 @@ export default function App() {
     <div className="min-h-screen bg-[#050505] text-zinc-300 font-sans selection:bg-violet-500 selection:text-white">
       
       {/* GLOBAL BACKGROUND AMBIENT GLOW FLUID GRID */}
+      
+    </div>
         {/* Glowing floating ambient orbs */}
         <div className="absolute top-[-10%] left-[-20%] w-[80%] h-[60%] rounded-full bg-violet-900/10 blur-[150px] ambient-glow" />
         <div className="absolute top-[30%] right-[-10%] w-[60%] h-[50%] rounded-full bg-fuchsia-955/5 blur-[160px] ambient-glow" style={{ animationDelay: '2s' }} />
