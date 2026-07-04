@@ -14,27 +14,19 @@
 
 html { scroll-behavior: smooth; }
 
-/*
-  PERFORMANCE FIX: Removed filter:blur() from animation keyframes.
-  blur() inside keyframes forces GPU repaint every frame = forced reflow.
-  The blur is now a static property on .ambient-glow so it only
-  calculates once. Only transform + opacity animate — both are
-  GPU-composited and never trigger layout recalculation.
-*/
-.ambient-glow {
-  filter: blur(80px);
-  border-radius: 50%;
-  will-change: transform, opacity;
-  animation: pulseGlow 12s infinite ease-in-out;
-}
-
 @keyframes pulseGlow {
   0%, 100% {
-    opacity: 0.2;
+    opacity: 0.25;
     transform: scale(1) translate(0, 0);
+    filter: blur(80px);
   }
   50% {
-    opacity: 0.4;
-    transform: scale(1.08) translate(20px, -10px);
+    opacity: 0.45;
+    transform: scale(1.1) translate(20px, -10px);
+    filter: blur(100px);
   }
+}
+
+.ambient-glow {
+  animation: pulseGlow 12s infinite ease-in-out;
 }
