@@ -15,26 +15,25 @@
 html { scroll-behavior: smooth; }
 
 /*
-  PERFORMANCE FIX: Replaced filter:blur() with opacity only.
-  blur() forces GPU repaint on every frame causing "forced reflow".
-  This version uses only opacity + transform which are GPU-composited
-  and don't trigger layout recalculation.
+  PERFORMANCE FIX for scroll lag:
+  - will-change: transform puts each orb on its own GPU layer
+  - This prevents the blur from being recalculated on every scroll frame
+  - contain: strict tells browser this element won't affect outside layout
 */
-@keyframes pulseGlow {
-  0%, 100% {
-    opacity: 0.2;
-    transform: scale(1) translate(0, 0);
-  }
-  50% {
-    opacity: 0.4;
-    transform: scale(1.08) translate(20px, -10px);
-  }
-}
-
 .ambient-glow {
   animation: pulseGlow 12s infinite ease-in-out;
   will-change: transform, opacity;
-  /* Use a large border-radius instead of blur for the soft glow effect */
-  border-radius: 50%;
-  filter: blur(80px);
+  contain: strict;
+  transform: translateZ(0);
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.2;
+    transform: translateZ(0) scale(1) translate(0, 0);
+  }
+  50% {
+    opacity: 0.38;
+    transform: translateZ(0) scale(1.08) translate(20px, -10px);
+  }
 }
