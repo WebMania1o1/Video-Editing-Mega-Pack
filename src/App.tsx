@@ -366,6 +366,18 @@ export default function App() {
       
       {/* GLOBAL BACKGROUND AMBIENT GLOW FLUID GRID */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-0 w-full h-[780px] md:h-[980px] overflow-hidden">
+<img
+src="/images/background.webp"
+alt="Professional Video Editing Studio Setup"
+className="w-full h-full object-cover opacity-[0.14] saturate-[0.8] contrast-[1.1]"
+referrerPolicy="no-referrer"
+/>
+<div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-[#050505]/50 to-[#050505]" />
+<div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-[#050505]" />
+<div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-transparent to-[#050505]" />
+      
+    </div>
 
         {/* Glowing floating ambient orbs */}
         <div className="absolute top-[-10%] left-[-20%] w-[80%] h-[60%] rounded-full bg-violet-900/10 blur-[150px] ambient-glow" />
