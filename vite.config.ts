@@ -12,18 +12,17 @@ export default defineConfig(() => {
       },
     },
     build: {
-      // Reduce chunk size warnings threshold
       chunkSizeWarningLimit: 1000,
+      // Inline CSS directly into HTML — eliminates render-blocking CSS file entirely
+      cssCodeSplit: false,
       rollupOptions: {
         output: {
-          // Split vendor libraries into separate cached chunks
           manualChunks: {
             'react-vendor': ['react', 'react-dom'],
             'motion': ['motion'],
           },
         },
       },
-      // Minify CSS aggressively
       cssMinify: true,
     },
     server: {
