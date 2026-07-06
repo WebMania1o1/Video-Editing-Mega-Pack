@@ -1,9 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "crypto";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 const SESSION_SECRET = process.env.PAYMENT_SESSION_SECRET || "vemb_production_gated_secret_2026_xyz";
 const ALL_IN_ONE_LINK = "https://drive.google.com/file/d/1sIJ5rWp0Gv-oSZGCnGwJ2N_EKtgUT0I2/view?usp=drive_link";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 function getRazorpayKeys() {
   const rawKeyId = process.env.RAZORPAY_KEY_ID || "";
@@ -46,25 +48,18 @@ async function fulfillOrder(name: string, email: string, paymentMethod: string) 
     timestamp: Date.now(),
   });
 
-  const smtpUser = process.env.SMTP_USER || "";
-  const smtpPass = process.env.SMTP_PASS || "";
-
-  if (!smtpUser || !smtpPass) {
-    console.warn("[Fulfill] SMTP not configured, skipping email.");
+  if (!process.env.RESEND_API_KEY) {
+    console.warn("[Fulfill] RESEND_API_KEY not configured, skipping email.");
     return { secureToken, delivered: false };
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: parseInt(process.env.SMTP_PORT || "465", 10),
-      secure: true,
-      auth: { user: smtpUser, pass: smtpPass },
-    });
-
     const appUrl = process.env.APP_URL || "https://editorsmega.vercel.app";
-    const info = await transporter.sendMail({
-      from: `"${process.env.FROM_NAME || "EditorsMega"}" <${smtpUser}>`,
+    const fromName = process.env.FROM_NAME || "EditorsMega";
+    const fromEmail = process.env.RESEND_FROM_EMAIL || "orders@editorsmega.com";
+
+    const { data, error } = await resend.emails.send({
+      from: `${fromName} <${fromEmail}>`,
       to: email,
       subject: `Your Video Editing Mega Bundle is Ready, ${name}!`,
       html: `<h2>Hi ${name}, your purchase is confirmed!</h2>
@@ -72,10 +67,16 @@ async function fulfillOrder(name: string, email: string, paymentMethod: string) 
              <p><a href="${appUrl}/vault?code=VEMB-2026-X779A">Access Your Vault</a></p>
              <p>License: <strong>VEMB-2026-X779A</strong></p>`,
     });
-    console.log(`[Fulfill] Email sent to ${email}: ${info.messageId}`);
-    return { secureToken, delivered: true, messageId: info.messageId };
+
+    if (error) {
+      console.error("[Fulfill Resend Error]", error);
+      return { secureToken, delivered: false, error: error.message };
+    }
+
+    console.log(`[Fulfill] Email sent to ${email}: ${data?.id}`);
+    return { secureToken, delivered: true, messageId: data?.id };
   } catch (error: any) {
-    console.error("[Fulfill SMTP Error]", error);
+    console.error("[Fulfill Resend Error]", error);
     return { secureToken, delivered: false, error: error.message };
   }
 }
