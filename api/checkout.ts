@@ -1,61 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import crypto from "crypto";
-import { Resend } from "resend";
-
-const SESSION_SECRET = process.env.PAYMENT_SESSION_SECRET || "vemb_production_gated_secret_2026_xyz";
-const ALL_IN_ONE_LINK = "https://drive.google.com/file/d/1sIJ5rWp0Gv-oSZGCnGwJ2N_EKtgUT0I2/view?usp=drive_link";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-function createSecureToken(payload: any) {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = crypto
-    .createHmac("sha256", SESSION_SECRET)
-    .update(`${header}.${body}`)
-    .digest("base64url");
-  return `${header}.${body}.${signature}`;
-}
-
-async function fulfillOrder(name: string, email: string, paymentMethod: string) {
-  const secureToken = createSecureToken({
-    name, email, paid: true,
-    method: paymentMethod || "card",
-    timestamp: Date.now(),
-  });
-
-  if (!process.env.RESEND_API_KEY) {
-    console.warn("[Checkout] RESEND_API_KEY not configured, skipping email.");
-    return { secureToken, delivered: false, message: "Order authorized. Configure RESEND_API_KEY to send emails." };
-  }
-
-  try {
-    const appUrl = process.env.APP_URL || "https://editorsmega.vercel.app";
-    const fromName = process.env.FROM_NAME || "EditorsMega";
-    const fromEmail = process.env.RESEND_FROM_EMAIL || "orders@editorsmega.com";
-
-    const { data, error } = await resend.emails.send({
-      from: `${fromName} <${fromEmail}>`,
-      to: email,
-      subject: `Your Video Editing Mega Bundle is Ready, ${name}!`,
-      html: `<h2>Hi ${name}, your purchase is confirmed!</h2>
-             <p><a href="${ALL_IN_ONE_LINK}">Download All-in-One Pack (56GB)</a></p>
-             <p><a href="${appUrl}/vault?code=VEMB-2026-X779A">Access Your Vault</a></p>
-             <p>License: <strong>VEMB-2026-X779A</strong></p>`,
-    });
-
-    if (error) {
-      console.error("[Checkout Resend Error]", error);
-      return { secureToken, delivered: false, error: error.message, message: "Payment success. Email delivery failed." };
-    }
-
-    console.log(`[Checkout] Email sent to ${email}: ${data?.id}`);
-    return { secureToken, delivered: true, messageId: data?.id, message: "Download link sent to your email!" };
-  } catch (error: any) {
-    console.error("[Checkout Resend Error]", error);
-    return { secureToken, delivered: false, error: error.message, message: "Payment success. Email delivery failed." };
-  }
-}
+import { fulfillOrder } from "./utils";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -72,6 +16,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       status: "success",
       token: result.secureToken,
       delivered: result.delivered,
+      messageId: (result as any).messageId,
+      warning: (result as any).warning,
       message: result.message,
     });
   } catch (error: any) {
